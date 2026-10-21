@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER_TERMINAL_SIMULATOR</title>
+  <style>
+    :root {
+      --bg-color: #050b07;
+      --term-green: #20c20e;
+      --term-dim: #0e6b06;
+      --scanline-color: rgba(0, 0, 0, 0.4);
+      --font-stack: "Courier New", Courier, "Lucida Console", Monaco, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--term-green);
+      font-family: var(--font-stack);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      text-shadow: 0 0 5px var(--term-green);
+    }
+
+    /* レトロCRTモニター風オーバーレイ */
+    .crt-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, var(--scanline-color) 50%),
+                  radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.8) 100%);
+      background-size: 100% 4px, 100% 100%;
+      z-index: 99;
+    }
+
+    /* ターミナル表示エリア */
+    #terminal-container {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    #terminal-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    #terminal-container::-webkit-scrollbar-thumb {
+      background: var(--term-dim);
+    }
+
+    .alert-text {
+      color: #ff3333 !important;
+      text-shadow: 0 0 8px #ff0000 !important;
+      font-weight: bold;
+    }
+
+    .horse-art {
+      color: #ffaa00;
+      text-shadow: 0 0 6px #ff7700;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    .halt-notice {
+      color: #ffffff;
+      background-color: #aa0000;
+      display: inline-block;
+      padding: 4px 8px;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="crt-overlay"></div>
+  <main id="terminal-container"></main>
+
+  <script>
+    const term = document.getElementById('terminal-container');
+    let intervalTimer = null;
+    const streamSpeed = 40;
+
+    const sysLogs = [
+      "SYN_SENT -> 192.168.0.1:443 [ACK_SEQ=0x9A4F]",
+      "DECRYPTING_CIPHER_STREAM: AES-256-GCM block 0x22A...",
+      "BYPASSING_PERIMETER_GATEWAY... [STATUS: OK]",
+      "OVERRIDE_SECURITY_DAEMON: token generated #90214",
+      "FETCH_BUFFER_OVERRUN: writing segment at offset 0x7FFF00",
+      "ROOT_KEY_EXCHANGE: handshake completed successfully",
+      "DUMPING STACK FRAME: [EAX: 0x00401000, EBX: 0x00000000]",
+      "INJECTING_DYNAMIC_HOOK: kernel32.dll!VirtualAllocEx"
+    ];
+
+    function getRandomHexLine() {
+      const addr = "0x" + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
+      const hex = Array.from({length: 8}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(' ');
+      return `[MEM_DUMP] ${addr}  ${hex}  |....|`;
+    }
+
+    function appendLine(text, customClass = '') {
+      const line = document.createElement('div');
+      if (customClass) line.className = customClass;
+      line.textContent = text;
+      term.appendChild(line);
+      term.scrollTop = term.scrollHeight;
+
+      if (term.childNodes.length > 500) {
+        term.removeChild(term.firstChild);
+      }
+    }
+
+    function stepStream() {
+      if (Math.random() > 0.4) {
+        appendLine(getRandomHexLine());
+      } else {
+        const randLog = sysLogs[Math.floor(Math.random() * sysLogs.length)];
+        appendLine(`[KERNEL_INFO] ${randLog}`);
+      }
+    }
+
+    // 木馬アスキーアート
+    const TROJAN_HORSE_AA = `
+                      .
+                     / \\
+                    |   |
+                 .-'     '-.
+                /           \\
+               |--.       .-'|
+               |  o\\     /o  |
+               |    )   (    |
+               \\   /     \\   /
+                '-'       '-'
+                 /  _ _ _  \\
+                |  /     \\  |
+                | |       | |
+            _   | |       | |   _
+          _/ \\  | |       | |  / \\_
+         /    \\_| |_     _| |_/    \\
+        |       '---'   '---'       |
+         \\_________________________/
+              |  |           |  |
+              |  |           |  |
+              |  |           |  |
+             /____\\         /____\\
+    =========================================
+    YOUR COMPUTER HAS DESTROYED BY TROJYAN :)
+    HAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHA!
+    =========================================`;
+
+    async function triggerTrojanSequence() {
+      // 1. ログの自動スクロールを即時停止（これ以降下には流れない）
+      if (intervalTimer) {
+        clearInterval(intervalTimer);
+        intervalTimer = null;
+      }
+
+      let clientIP = "192.168.1.104 (MOCK)";
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.ip) clientIP = data.ip;
+        }
+      } catch (err) {
+        clientIP = "127.0.0.1 (FALLBACK)";
+      }
+
+      // 木馬ロゴと終了メッセージを出力して終了
+      appendLine("\n" + "=".repeat(50), "alert-text");
+      appendLine(`[CRITICAL WARNING] INCOMING CONNECTION IDENTIFIED`, "alert-text");
+      appendLine(`TARGET_IP: >>> ${clientIP} <<<`, "alert-text");
+      appendLine(`GEOLOCATION_LOCK: ACTIVE / PAYLOAD UNPACKED`, "alert-text");
+      appendLine(TROJAN_HORSE_AA, "horse-art");
+      appendLine("=".repeat(50), "alert-text");
+      appendLine("[!] PROCESS TERMINATED", "halt-notice");
+    }
+
+    // ログ生成の開始
+    intervalTimer = setInterval(stepStream, streamSpeed);
+
+    // 10秒後に木馬シーケンスを実行して停止
+    setTimeout(triggerTrojanSequence, 10000);
+  </script>
+</body>
+</html>
